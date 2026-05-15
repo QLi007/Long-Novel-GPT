@@ -1,5 +1,6 @@
 import json
 import time
+from threading import Lock
 
 from flask import Flask, request, Response, jsonify
 from flask_cors import CORS
@@ -25,6 +26,9 @@ from config import MAX_NOVEL_SUMMARY_LENGTH, MAX_THREAD_NUM, ENABLE_ONLINE_DEMO
 
 
 app.register_blueprint(setting_bp)
+
+active_streams = {}
+active_streams_lock = Lock()
 
 # 添加配置
 BACKEND_HOST = os.environ.get('BACKEND_HOST', '0.0.0.0')
@@ -128,6 +132,43 @@ def get_delta_chunks(prev_chunks, curr_chunks):
     return "delta", delta_chunks
 
 
+def get_json_payload(required_fields):
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        raise ValueError("请求体必须是 JSON 对象")
+
+    missing_fields = [field for field in required_fields if field not in data]
+    if missing_fields:
+        raise ValueError("缺少必要字段: " + ", ".join(missing_fields))
+
+    return data
+
+
+def register_stream():
+    stream_id = str(time.time())
+    with active_streams_lock:
+        active_streams[stream_id] = True
+    return stream_id
+
+
+def is_stream_active(stream_id):
+    with active_streams_lock:
+        return active_streams.get(stream_id, False)
+
+
+def stop_active_stream(stream_id):
+    with active_streams_lock:
+        if stream_id in active_streams:
+            active_streams[stream_id] = False
+            return True
+    return False
+
+
+def remove_stream(stream_id):
+    with active_streams_lock:
+        active_streams.pop(stream_id, None)
+
+
 def call_write(writer_mode, chunk_list, global_context, chunk_span, prompt_content, x_chunk_length, y_chunk_length, main_model, sub_model, max_thread_num, only_prompt):
     if ENABLE_ONLINE_DEMO:
         if max_thread_num > MAX_THREAD_NUM:
@@ -225,25 +266,28 @@ def call_write(writer_mode, chunk_list, global_context, chunk_span, prompt_conte
 
 @app.route('/write', methods=['POST'])
 def write():
-    data = request.json                 
-    writer_mode = data['writer_mode']
-    chunk_list = data['chunk_list']
-    chunk_span = data['chunk_span']
-    prompt_content = data['prompt_content']
-    x_chunk_length = data['x_chunk_length']
-    y_chunk_length = data['y_chunk_length']
-    main_model = data['main_model']
-    sub_model = data['sub_model']
-    global_context = data['global_context']
-    only_prompt = data['only_prompt']
-    
-    # Update settings if provided
-    if 'settings' in data:
-        max_thread_num = data['settings']['MAX_THREAD_NUM']
+    try:
+        data = get_json_payload([
+            'writer_mode', 'chunk_list', 'chunk_span', 'prompt_content',
+            'x_chunk_length', 'y_chunk_length', 'main_model', 'sub_model',
+            'global_context', 'only_prompt'
+        ])
+        writer_mode = data['writer_mode']
+        chunk_list = data['chunk_list']
+        chunk_span = data['chunk_span']
+        prompt_content = data['prompt_content']
+        x_chunk_length = data['x_chunk_length']
+        y_chunk_length = data['y_chunk_length']
+        main_model = data['main_model']
+        sub_model = data['sub_model']
+        global_context = data['global_context']
+        only_prompt = data['only_prompt']
+        max_thread_num = data.get('settings', {}).get('MAX_THREAD_NUM', MAX_THREAD_NUM)
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
 
     # Generate unique stream ID
-    stream_id = str(time.time())
-    active_streams[stream_id] = True
+    stream_id = register_stream()
     
     def generate():
         try:
@@ -251,7 +295,7 @@ def write():
             yield f"data: {json.dumps({'stream_id': stream_id})}\n\n"
 
             for result in call_write(writer_mode, list(chunk_list), global_context, chunk_span, prompt_content, x_chunk_length, y_chunk_length, main_model, sub_model, max_thread_num, only_prompt):
-                if not active_streams.get(stream_id, False):
+                if not is_stream_active(stream_id):
                     # Stream was stopped by client
                     print(f"Stream was stopped by client: {stream_id}")
                     return
@@ -269,21 +313,22 @@ def write():
             yield f"data: {json.dumps(error_data)}\n\n"
         finally:
             # Clean up stream tracking
-            if stream_id in active_streams:
-                del active_streams[stream_id]
+            remove_stream(stream_id)
 
     return Response(generate(), mimetype='text/event-stream')
 
 
 @app.route('/summary', methods=['POST'])
 def process_novel_text():
-    data = request.json
-    content = data['content']
-    novel_name = data['novel_name']
+    try:
+        data = get_json_payload(['content', 'novel_name', 'main_model', 'sub_model', 'settings'])
+        content = data['content']
+        novel_name = data['novel_name']
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
 
     # Generate unique stream ID
-    stream_id = str(time.time())
-    active_streams[stream_id] = True
+    stream_id = register_stream()
 
     def generate():
         try:
@@ -294,8 +339,9 @@ def process_novel_text():
             max_novel_summary_length = data['settings']['MAX_NOVEL_SUMMARY_LENGTH']
             max_thread_num = data['settings']['MAX_THREAD_NUM']
             last_yield_time = 0
+            yield_value = None
             for result in process_novel(content, novel_name, main_model, sub_model, max_novel_summary_length, max_thread_num):
-                if not active_streams.get(stream_id, False):
+                if not is_stream_active(stream_id):
                     # Stream was stopped by client
                     print(f"Stream was stopped by client: {stream_id}")
                     return
@@ -305,13 +351,7 @@ def process_novel_text():
                 if current_time - last_yield_time >= 0.2:
                     last_yield_time = current_time
                     yield yield_value
-            if current_time - last_yield_time < 0.2:
-                # Save last yield to yaml file
-                import yaml
-                result_dict = json.loads(yield_value.replace('data: ', '').strip())
-                with open('tmp.yaml', 'w', encoding='utf-8') as f:
-                    yaml.dump(result_dict, f, allow_unicode=True)
-                    
+            if yield_value is not None and current_time - last_yield_time < 0.2:
                 yield yield_value   # Ensure last yield is returned
             
         except Exception as e:
@@ -321,21 +361,15 @@ def process_novel_text():
             yield f"data: {json.dumps(error_data)}\n\n"
         finally:
             # Clean up stream tracking
-            if stream_id in active_streams:
-                del active_streams[stream_id]
+            remove_stream(stream_id)
 
     return Response(generate(), mimetype='text/event-stream')
 
-# Dictionary to track active streams
-active_streams = {}
-
 @app.route('/stop_stream', methods=['POST'])
 def stop_stream():
-    data = request.json
+    data = request.get_json(silent=True) or {}
     stream_id = data.get('stream_id')
-    if stream_id in active_streams:
-        active_streams[stream_id] = False
-    return jsonify({'success': True})
+    return jsonify({'success': stop_active_stream(stream_id)})
 
 if __name__ == '__main__':
-    app.run(host=BACKEND_HOST, port=BACKEND_PORT, debug=False) 
+    app.run(host=BACKEND_HOST, port=BACKEND_PORT, debug=False)

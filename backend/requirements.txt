@@ -2,12 +2,12 @@ flask
 flask-cors
 gunicorn
 openai
+python-dotenv
 qianfan
 pymongo
+pyyaml
 rich
 spark_ai_python
 zhipuai
-flask
-flask-cors
 numpy
 chardet

@@ -1,20 +1,16 @@
 import os
-from dotenv import dotenv_values, load_dotenv
+from dotenv import load_dotenv
 
-print("Loading .env file...")
 env_path = os.path.join(os.path.dirname(__file__), '.env')
 if os.path.exists(env_path):
-    env_dict = dotenv_values(env_path)
-    
-    print("Environment variables to be loaded:")
-    for key, value in env_dict.items():
-        print(f"{key}={value}")
-    print("-" * 50)
-    
-    os.environ.update(env_dict)
+    load_dotenv(env_path, override=True)
     print(f"Loaded environment variables from: {env_path}")
 else:
     print("Warning: .env file not found")
+
+
+def _csv_env(key, default=''):
+    return [item.strip() for item in os.getenv(key, default).split(',') if item.strip()]
 
 
 # Thread Configuration
@@ -43,37 +39,34 @@ API_SETTINGS = {
     'wenxin': {
         'ak': os.getenv('WENXIN_AK', ''),
         'sk': os.getenv('WENXIN_SK', ''),
-        'available_models': os.getenv('WENXIN_AVAILABLE_MODELS', '').split(','),
+        'available_models': _csv_env('WENXIN_AVAILABLE_MODELS'),
         'max_tokens': 4096,
     },
     'doubao': {
         'api_key': os.getenv('DOUBAO_API_KEY', ''),
-        'endpoint_ids': os.getenv('DOUBAO_ENDPOINT_IDS', '').split(','),
-        'available_models': os.getenv('DOUBAO_AVAILABLE_MODELS', '').split(','),
+        'endpoint_ids': _csv_env('DOUBAO_ENDPOINT_IDS'),
+        'available_models': _csv_env('DOUBAO_AVAILABLE_MODELS'),
         'max_tokens': 4096,
     },
     'gpt': {
         'base_url': os.getenv('GPT_BASE_URL', ''),
         'api_key': os.getenv('GPT_API_KEY', ''),
         'proxies': os.getenv('GPT_PROXIES', ''),
-        'available_models': os.getenv('GPT_AVAILABLE_MODELS', '').split(','),
+        'available_models': _csv_env('GPT_AVAILABLE_MODELS'),
         'max_tokens': 4096,
     },
     'zhipuai': {
         'api_key': os.getenv('ZHIPUAI_API_KEY', ''),
-        'available_models': os.getenv('ZHIPUAI_AVAILABLE_MODELS', '').split(','),
+        'available_models': _csv_env('ZHIPUAI_AVAILABLE_MODELS'),
         'max_tokens': 4096,
     },
     'local': {
         'base_url': os.getenv('LOCAL_BASE_URL', ''),
         'api_key': os.getenv('LOCAL_API_KEY', ''),
-        'available_models': os.getenv('LOCAL_AVAILABLE_MODELS', '').split(','),
+        'available_models': _csv_env('LOCAL_AVAILABLE_MODELS'),
         'max_tokens': 4096,
     }
 }
-
-for model in API_SETTINGS.values():
-    model['available_models'] = [e.strip() for e in model['available_models']]
 
 DEFAULT_MAIN_MODEL = os.getenv('DEFAULT_MAIN_MODEL', 'wenxin/ERNIE-Novel-8K')
 DEFAULT_SUB_MODEL = os.getenv('DEFAULT_SUB_MODEL', 'wenxin/ERNIE-3.5-8K')

@@ -1,7 +1,6 @@
 import time
 import functools
 from typing import Generator, Any
-from pymongo import MongoClient
 import hashlib
 import json
 import datetime
@@ -10,8 +9,6 @@ import random
 from config import ENABLE_MONOGODB, MONOGODB_DB_NAME, ENABLE_MONOGODB_CACHE, CACHE_REPLAY_SPEED, CACHE_REPLAY_MAX_DELAY
 
 from .chat_messages import ChatMessages
-from .mongodb_cost import record_api_cost, check_cost_limits
-from .mongodb_init import mongo_client as client
 
 def create_cache_key(func_name: str, args: tuple, kwargs: dict) -> str:
     """创建缓存键"""
@@ -47,6 +44,9 @@ def llm_api_cache():
     def decorator(func):
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
+            from .mongodb_cost import record_api_cost, check_cost_limits
+            from .mongodb_init import mongo_client as client
+
             check_cost_limits()
 
             use_cache = kwargs.pop('use_cache', True)   # pop很重要
