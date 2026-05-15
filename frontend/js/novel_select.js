@@ -131,10 +131,11 @@ function displayNovels(novels) {
     novels.forEach(novel => {
         const novelItem = document.createElement('div');
         novelItem.className = 'novel-item';
-        novelItem.innerHTML = `
-            <h4>${novel.title}</h4>
-            <p>${novel.description || '暂无简介'}</p>
-        `;
+        const title = document.createElement('h4');
+        title.textContent = novel.title;
+        const description = document.createElement('p');
+        description.textContent = novel.description || '暂无简介';
+        novelItem.append(title, description);
         
         novelItem.addEventListener('click', () => {
             selectNovel(novel);
@@ -214,7 +215,11 @@ async function handleFileSelect(event) {
             currentFetchController = new AbortController();
             currentStreamId = null;
 
-            const settings = JSON.parse(localStorage.getItem('settings'));
+            const settings = JSON.parse(localStorage.getItem('settings') || '{}');
+            if (!settings.MAIN_MODEL || !settings.SUB_MODEL) {
+                throw new Error('请先在设置中选择主模型和辅助模型');
+            }
+
             const response = await fetch(`${window._env_?.SERVER_URL}/summary`, {
                 method: 'POST',
                 headers: {
@@ -232,6 +237,11 @@ async function handleFileSelect(event) {
                 }),
                 signal: currentFetchController.signal
             });
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.error || `请求失败：${response.status}`);
+            }
 
             const reader = response.body.getReader();
             const decoder = new TextDecoder();

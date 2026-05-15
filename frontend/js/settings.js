@@ -11,9 +11,6 @@ function createSettingsPopup() {
     const popup = document.createElement('div');
     popup.className = 'settings-popup';
     
-    // Get settings from localStorage
-    const settings = JSON.parse(localStorage.getItem('settings') || '{}');
-    
     popup.innerHTML = `
         <div class="settings-header">
             <div class="header-content">
@@ -27,11 +24,11 @@ function createSettingsPopup() {
                 <h4>系统参数</h4>
                 <div class="setting-item">
                     <label for="maxThreadNum">最大线程数</label>
-                    <input type="number" id="maxThreadNum" min="1" max="20" value="${settings.MAX_THREAD_NUM}">
+                    <input type="number" id="maxThreadNum" min="1" max="20">
                 </div>
                 <div class="setting-item">
                     <label for="maxNovelSummaryLength">导入小说的最大长度</label>
-                    <input type="number" id="maxNovelSummaryLength" min="10000" max="1000000" value="${settings.MAX_NOVEL_SUMMARY_LENGTH}">
+                    <input type="number" id="maxNovelSummaryLength" min="10000" max="1000000">
                 </div>
             </div>
             <div class="settings-section">
@@ -48,6 +45,17 @@ function createSettingsPopup() {
                     <div class="model-select-group">
                         <select id="defaultSubModel"></select>
                         <button class="test-model-btn" data-for="defaultSubModel">测试</button>
+                    </div>
+                </div>
+            </div>
+            <div class="settings-section">
+                <h4>项目数据</h4>
+                <div class="setting-item">
+                    <label>备份和迁移</label>
+                    <div class="model-select-group">
+                        <button class="export-data-btn">导出项目</button>
+                        <button class="import-data-btn">导入项目</button>
+                        <input type="file" class="import-data-input" accept=".json,application/json" style="display: none">
                     </div>
                 </div>
             </div>
@@ -69,6 +77,12 @@ function createSettingsPopup() {
         saveSettings();
         hideSettings();
     });
+
+    popup.querySelector('.export-data-btn').addEventListener('click', exportProjectData);
+    popup.querySelector('.import-data-btn').addEventListener('click', () => {
+        popup.querySelector('.import-data-input').click();
+    });
+    popup.querySelector('.import-data-input').addEventListener('change', importProjectData);
     
     // Add test button event listeners
     const testButtons = popup.querySelectorAll('.test-model-btn');
@@ -122,6 +136,74 @@ function createSettingsPopup() {
     return overlay;
 }
 
+function collectProjectData() {
+    const data = {
+        version: 1,
+        exported_at: new Date().toISOString(),
+        settings: JSON.parse(localStorage.getItem('settings') || '{}'),
+        storage: {}
+    };
+
+    for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith('data_')) {
+            data.storage[key] = localStorage.getItem(key);
+        }
+    }
+
+    return data;
+}
+
+function exportProjectData() {
+    const data = collectProjectData();
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+
+    link.href = url;
+    link.download = `long-novel-gpt-project-${timestamp}.json`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+    showToast('项目已导出', 'success');
+}
+
+function importProjectData(event) {
+    const file = event.target.files[0];
+    event.target.value = '';
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = () => {
+        try {
+            const data = JSON.parse(reader.result);
+            if (!data || typeof data !== 'object' || !data.storage || typeof data.storage !== 'object') {
+                throw new Error('项目文件格式不正确');
+            }
+
+            Object.entries(data.storage).forEach(([key, value]) => {
+                if (key.startsWith('data_') && typeof value === 'string') {
+                    localStorage.setItem(key, value);
+                }
+            });
+
+            if (data.settings && typeof data.settings === 'object') {
+                localStorage.setItem('settings', JSON.stringify(data.settings));
+            }
+
+            loadCurrentSettings();
+            showToast('项目已导入，请切换标签查看内容', 'success');
+        } catch (error) {
+            console.error('Error importing project data:', error);
+            showToast(`导入失败：${error.message}`, 'error');
+        }
+    };
+    reader.onerror = () => showToast('读取项目文件失败', 'error');
+    reader.readAsText(file);
+}
+
 export async function loadModelConfigs() {
     try {
         const response = await fetch(`${window._env_?.SERVER_URL}/setting`);
@@ -166,7 +248,7 @@ function updateModelSelects() {
 }
 
 function loadCurrentSettings() {
-    const settings = JSON.parse(localStorage.getItem('settings'));
+    const settings = JSON.parse(localStorage.getItem('settings') || '{}');
     const mainModelSelect = document.getElementById('defaultMainModel');
     const subModelSelect = document.getElementById('defaultSubModel');
     
@@ -178,16 +260,18 @@ function loadCurrentSettings() {
     }
 
     // Load max thread number and novel summary length
-    document.getElementById('maxThreadNum').value = settings.MAX_THREAD_NUM;
-    document.getElementById('maxNovelSummaryLength').value = settings.MAX_NOVEL_SUMMARY_LENGTH;
+    document.getElementById('maxThreadNum').value = settings.MAX_THREAD_NUM || 5;
+    document.getElementById('maxNovelSummaryLength').value = settings.MAX_NOVEL_SUMMARY_LENGTH || 20000;
 }
 
 function saveSettings() {
+    const maxThreadNum = Math.min(20, Math.max(1, parseInt(document.getElementById('maxThreadNum').value, 10) || 1));
+    const maxNovelSummaryLength = Math.min(1000000, Math.max(10000, parseInt(document.getElementById('maxNovelSummaryLength').value, 10) || 10000));
     const settings = {
         MAIN_MODEL: document.getElementById('defaultMainModel').value,
         SUB_MODEL: document.getElementById('defaultSubModel').value,
-        MAX_THREAD_NUM: parseInt(document.getElementById('maxThreadNum').value),
-        MAX_NOVEL_SUMMARY_LENGTH: parseInt(document.getElementById('maxNovelSummaryLength').value)
+        MAX_THREAD_NUM: maxThreadNum,
+        MAX_NOVEL_SUMMARY_LENGTH: maxNovelSummaryLength
     };
     
     localStorage.setItem('settings', JSON.stringify(settings));

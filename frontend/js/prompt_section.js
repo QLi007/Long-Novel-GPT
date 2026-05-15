@@ -55,10 +55,11 @@ function updateExampleCards(mode) {
     modeExamples.forEach(example => {
         const card = document.createElement('div');
         card.className = 'example-card';
-        card.innerHTML = `
-            <h4>${example.title}</h4>
-            <p>${example.subtitle}</p>
-        `;
+        const title = document.createElement('h4');
+        title.textContent = example.title;
+        const subtitle = document.createElement('p');
+        subtitle.textContent = example.subtitle;
+        card.append(title, subtitle);
         card.addEventListener('click', () => {
             const chunks = Array.from(document.querySelectorAll('.chunk-container'));
             if (chunks.length > 0) {
@@ -100,7 +101,7 @@ function updateWindowSizeOptions(mode) {
     const windowSizeSelect = document.querySelector('.context-window-select');
     windowSizeSelect.innerHTML = '';
     
-    WINDOW_SIZES[mode].forEach(size => {
+    (WINDOW_SIZES[mode] || []).forEach(size => {
         const option = document.createElement('option');
         option.value = JSON.stringify({ x: size.x, y: size.y });
         option.textContent = size.label;

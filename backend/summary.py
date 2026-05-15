@@ -3,7 +3,10 @@ from core.parser_utils import parse_chapters
 from core.summary_novel import summary_draft, summary_plot, summary_chapters
 from config import MAX_NOVEL_SUMMARY_LENGTH, MAX_THREAD_NUM, ENABLE_ONLINE_DEMO
 
-def batch_yield(generators, max_co_num=5, ret=[]):
+def batch_yield(generators, max_co_num=5, ret=None):
+    if ret is None:
+        ret = []
+
     results = [None] * len(generators)
     yields = [None] * len(generators)
     finished = [False] * len(generators)

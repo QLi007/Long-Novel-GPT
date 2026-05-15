@@ -24,10 +24,19 @@ def get_settings():
 def test_model():
     """Test if a model configuration works"""
     try:
-        data = request.get_json()
+        data = request.get_json(silent=True)
+        if not isinstance(data, dict):
+            return jsonify({
+                'success': False,
+                'error': '请求体必须是 JSON 对象'
+            }), 400
+
         provider_model = data.get('provider_model')
         
-        from backend_utils import get_model_config_from_provider_model
+        try:
+            from backend_utils import get_model_config_from_provider_model
+        except ImportError:
+            from backend.backend_utils import get_model_config_from_provider_model
         model_config = get_model_config_from_provider_model(provider_model)
         
         from llm_api import test_stream_chat
@@ -39,6 +48,11 @@ def test_model():
             'success': True,
             'response': response
         })
+    except ValueError as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 400
     except Exception as e:
         return jsonify({
             'success': False,

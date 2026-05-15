@@ -32,6 +32,29 @@ class AppTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertIn("缺少必要字段", response.get_json()["error"])
 
+    def test_setting_returns_model_settings(self):
+        response = self.client.get("/setting")
+
+        self.assertEqual(response.status_code, 200)
+        data = response.get_json()
+        self.assertIn("models", data)
+        self.assertIn("MAIN_MODEL", data)
+        self.assertIn("SUB_MODEL", data)
+
+    def test_test_model_rejects_non_json(self):
+        response = self.client.post("/test_model", data="not-json", content_type="text/plain")
+
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(response.get_json()["success"])
+        self.assertIn("请求体必须是 JSON 对象", response.get_json()["error"])
+
+    def test_test_model_rejects_bad_model_format(self):
+        response = self.client.post("/test_model", json={"provider_model": "bad-format"})
+
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(response.get_json()["success"])
+        self.assertIn("provider/model", response.get_json()["error"])
+
 
 if __name__ == "__main__":
     unittest.main()

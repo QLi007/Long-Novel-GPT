@@ -99,7 +99,10 @@ document.addEventListener('DOMContentLoaded', () => {
             const { x: x_chunk_length, y: y_chunk_length } = JSON.parse(windowSizeStr);
             
             // Get selected model provider            
-            const settings = JSON.parse(localStorage.getItem('settings'));
+            const settings = JSON.parse(localStorage.getItem('settings') || '{}');
+            if (!settings.MAIN_MODEL || !settings.SUB_MODEL) {
+                throw new Error('请先在设置中选择主模型和辅助模型');
+            }
             
             const requestData = {
                 writer_mode: writerMode,
@@ -125,6 +128,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 body: JSON.stringify(requestData),
                 signal: currentController.signal
             });
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.error || `请求失败：${response.status}`);
+            }
 
             const reader = response.body.getReader();
             const decoder = new TextDecoder();
@@ -463,4 +471,4 @@ document.addEventListener('DOMContentLoaded', () => {
     window.handleContentModeChange = handleModeChange;
 
     initializeEventListeners();
-}); 
+});

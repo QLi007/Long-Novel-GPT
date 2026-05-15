@@ -27,26 +27,50 @@ export async function stopStream(streamId) {
 export function createNewChunk(x, y, revision, showRevision = false, showX = true, showY = true) {
     const chunkDiv = document.createElement('div');
     chunkDiv.className = 'chunk-container';
-    
-    chunkDiv.innerHTML = `
-        <div class="x-item ${showX ? '' : 'hidden'}">
-            <textarea class="x-input" placeholder="在这里输入...">${x}</textarea>
-        </div>
-        <div class="y-item ${showY ? '' : 'hidden'}">
-            <textarea class="y-input" placeholder="创作的内容会显示在这里...">${y}</textarea>
-            <div class="chunk-actions">
-                <button class="add-x-btn">+</button>
-                <button class="delete-x-btn">-</button>
-            </div>
-        </div>
-        <div class="revision-item ${showRevision ? 'visible' : ''}">
-            <textarea class="revision-input" placeholder="这里会显示修改稿...">${revision}</textarea>
-            <div class="revision-actions hidden">
-                <button class="accept-btn">接受</button>
-                <button class="reject-btn">拒绝</button>
-            </div>
-        </div>
-    `;
+
+    const xItem = document.createElement('div');
+    xItem.className = `x-item ${showX ? '' : 'hidden'}`.trim();
+    const xInput = document.createElement('textarea');
+    xInput.className = 'x-input';
+    xInput.placeholder = '在这里输入...';
+    xInput.value = x ?? '';
+    xItem.appendChild(xInput);
+
+    const yItem = document.createElement('div');
+    yItem.className = `y-item ${showY ? '' : 'hidden'}`.trim();
+    const yInput = document.createElement('textarea');
+    yInput.className = 'y-input';
+    yInput.placeholder = '创作的内容会显示在这里...';
+    yInput.value = y ?? '';
+    const chunkActions = document.createElement('div');
+    chunkActions.className = 'chunk-actions';
+    const addButton = document.createElement('button');
+    addButton.className = 'add-x-btn';
+    addButton.textContent = '+';
+    const deleteButton = document.createElement('button');
+    deleteButton.className = 'delete-x-btn';
+    deleteButton.textContent = '-';
+    chunkActions.append(addButton, deleteButton);
+    yItem.append(yInput, chunkActions);
+
+    const revisionItem = document.createElement('div');
+    revisionItem.className = `revision-item ${showRevision ? 'visible' : ''}`.trim();
+    const revisionInput = document.createElement('textarea');
+    revisionInput.className = 'revision-input';
+    revisionInput.placeholder = '这里会显示修改稿...';
+    revisionInput.value = revision ?? '';
+    const revisionActions = document.createElement('div');
+    revisionActions.className = 'revision-actions hidden';
+    const acceptButton = document.createElement('button');
+    acceptButton.className = 'accept-btn';
+    acceptButton.textContent = '接受';
+    const rejectButton = document.createElement('button');
+    rejectButton.className = 'reject-btn';
+    rejectButton.textContent = '拒绝';
+    revisionActions.append(acceptButton, rejectButton);
+    revisionItem.append(revisionInput, revisionActions);
+
+    chunkDiv.append(xItem, yItem, revisionItem);
     
     return chunkDiv;
 }
@@ -294,7 +318,11 @@ export function showBottomBar(content) {
         document.body.appendChild(bar);
     }
 
-    bar.innerHTML = `<span class="bottom-bar-content">${content}</span>`;
+    bar.replaceChildren();
+    const contentSpan = document.createElement('span');
+    contentSpan.className = 'bottom-bar-content';
+    contentSpan.textContent = content;
+    bar.appendChild(contentSpan);
     
     // Ensure the bar is visible
     requestAnimationFrame(() => {
